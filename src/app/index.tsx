@@ -1,98 +1,160 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { router } from "expo-router";
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+const background = "#062528";
+const word = "Ripples";
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+const subscribe = () => () => {};
+
+export default function WelcomeScreen() {
+  const booted = useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
+  const moved = useRef(false);
+
+  useEffect(() => {
+    if (!booted || moved.current) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      moved.current = true;
+      router.replace("/discover");
+    }, 1600);
+
+    return () => clearTimeout(timeout);
+  }, [booted]);
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <View style={styles.screen}>
+      <StatusBar style="light" />
+      <View style={styles.stage}>
+        {booted ? (
+          <>
+            <Ripple delay={180} />
+            <Ripple delay={460} />
+            <View
+              accessibilityRole="header"
+              accessibilityLabel={word}
+              style={styles.word}
+            >
+              {word.split("").map((letter, index) => (
+                <WrittenLetter
+                  key={`${letter}-${index}`}
+                  letter={letter}
+                  index={index}
+                />
+              ))}
+            </View>
+          </>
+        ) : (
+          <Text accessibilityRole="header" style={[styles.title, styles.hidden]}>
+            {word}
+          </Text>
+        )}
+      </View>
+    </View>
   );
 }
 
-export default function HomeScreen() {
+function Ripple({ delay }: { delay: number }) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withDelay(
+      delay,
+      withTiming(1, { duration: 1600, easing: Easing.out(Easing.cubic) }),
+    );
+  }, [delay, progress]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.12, 1], [0, 0.55, 0]),
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.35, 2.6]) }],
+  }));
+
+  return <Animated.View pointerEvents="none" style={[styles.ripple, style]} />;
+}
+
+function WrittenLetter({ letter, index }: { letter: string; index: number }) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(16);
+  const scale = useSharedValue(0.92);
+
+  useEffect(() => {
+    const delay = 320 + index * 60;
+    opacity.value = withDelay(
+      delay,
+      withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }),
+    );
+    translateY.value = withDelay(
+      delay,
+      withSpring(0, { damping: 14, stiffness: 170, mass: 0.7 }),
+    );
+    scale.value = withDelay(
+      delay,
+      withSpring(1, { damping: 12, stiffness: 180, mass: 0.7 }),
+    );
+  }, [index, opacity, scale, translateY]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }, { scale: scale.value }],
+  }));
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <Animated.Text accessible={false} style={[styles.title, style]}>
+      {letter}
+    </Animated.Text>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: background,
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+  stage: {
+    alignItems: "center",
+    justifyContent: "center",
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  ripple: {
+    position: "absolute",
+    width: 148,
+    height: 148,
+    marginLeft: -74,
+    marginTop: -74,
+    left: "50%",
+    top: "50%",
+    borderRadius: 74,
+    borderWidth: 1.5,
+    borderColor: "rgba(214, 244, 242, 0.9)",
+  },
+  word: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   title: {
-    textAlign: 'center',
+    color: "#FFFFFF",
+    fontSize: 32,
+    fontWeight: "700",
+    letterSpacing: -0.4,
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+  hidden: {
+    opacity: 0,
   },
 });
